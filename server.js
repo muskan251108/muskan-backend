@@ -44,7 +44,6 @@ mongoose
 // AUTH ROUTES
 // =======================
 
-// REGISTER
 app.post("/api/auth/register", async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
@@ -63,7 +62,6 @@ app.post("/api/auth/register", async (req, res) => {
   }
 });
 
-// LOGIN
 app.post("/api/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -109,7 +107,29 @@ app.get("/api/doctors", authMiddleware, async (req, res) => {
   }
 });
 
-// GET doctor profile
+// GET single doctor public profile
+app.get("/api/doctors/:id", authMiddleware, async (req, res) => {
+  try {
+    const doctor = await Doctor.findById(req.params.id).populate("userId", "name email");
+    if (!doctor) return res.status(404).json({ message: "Doctor not found" });
+    res.json({
+      _id: doctor._id,
+      name: doctor.userId.name,
+      email: doctor.userId.email,
+      specialization: doctor.specialization,
+      qualification: doctor.qualification,
+      experience: doctor.experience,
+      address: doctor.address,
+      fees: doctor.fees,
+      timing: doctor.timings,
+      available: doctor.available,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET doctor own profile
 app.get("/api/doctor/profile", authMiddleware, allowRoles("doctor"), async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -169,7 +189,7 @@ app.get("/api/doctor/appointments", authMiddleware, allowRoles("doctor"), async 
   }
 });
 
-// PUT appointment status update
+// PUT appointment status
 app.put("/api/appointments/:id/status", authMiddleware, allowRoles("doctor"), async (req, res) => {
   try {
     const { status } = req.body;
