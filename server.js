@@ -40,7 +40,11 @@ mongoose
   .then(() => console.log("✅ MongoDB Connected"))
   .catch(err => console.log(err));
 
+// =======================
 // AUTH ROUTES
+// =======================
+
+// REGISTER
 app.post("/api/auth/register", async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
@@ -59,6 +63,7 @@ app.post("/api/auth/register", async (req, res) => {
   }
 });
 
+// LOGIN
 app.post("/api/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -77,7 +82,11 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
+// =======================
 // DOCTOR ROUTES
+// =======================
+
+// GET all doctors
 app.get("/api/doctors", authMiddleware, async (req, res) => {
   try {
     const doctors = await Doctor.find().populate("userId", "name email");
@@ -87,6 +96,9 @@ app.get("/api/doctors", authMiddleware, async (req, res) => {
       name: doc.userId.name,
       email: doc.userId.email,
       specialization: doc.specialization,
+      qualification: doc.qualification,
+      experience: doc.experience,
+      address: doc.address,
       fees: doc.fees,
       timing: doc.timings,
       available: doc.available,
@@ -97,6 +109,7 @@ app.get("/api/doctors", authMiddleware, async (req, res) => {
   }
 });
 
+// GET doctor profile
 app.get("/api/doctor/profile", authMiddleware, allowRoles("doctor"), async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -107,6 +120,9 @@ app.get("/api/doctor/profile", authMiddleware, allowRoles("doctor"), async (req,
       name: user.name,
       email: user.email,
       specialization: doctor.specialization,
+      qualification: doctor.qualification,
+      experience: doctor.experience,
+      address: doctor.address,
       fees: doctor.fees,
       timing: doctor.timings,
       available: doctor.available,
@@ -116,12 +132,13 @@ app.get("/api/doctor/profile", authMiddleware, allowRoles("doctor"), async (req,
   }
 });
 
+// PUT doctor profile update
 app.put("/api/doctor/profile", authMiddleware, allowRoles("doctor"), async (req, res) => {
   try {
-    const { fees, timing, available } = req.body;
+    const { fees, timing, available, specialization, qualification, experience, address } = req.body;
     const doctor = await Doctor.findOneAndUpdate(
       { userId: req.user.id },
-      { fees, timings: timing, available },
+      { fees, timings: timing, available, specialization, qualification, experience, address },
       { new: true }
     );
     if (!doctor) return res.status(404).json({ message: "Doctor not found" });
@@ -131,6 +148,7 @@ app.put("/api/doctor/profile", authMiddleware, allowRoles("doctor"), async (req,
   }
 });
 
+// GET doctor appointments
 app.get("/api/doctor/appointments", authMiddleware, allowRoles("doctor"), async (req, res) => {
   try {
     const doctor = await Doctor.findOne({ userId: req.user.id });
@@ -151,7 +169,7 @@ app.get("/api/doctor/appointments", authMiddleware, allowRoles("doctor"), async 
   }
 });
 
-// Appointment status update
+// PUT appointment status update
 app.put("/api/appointments/:id/status", authMiddleware, allowRoles("doctor"), async (req, res) => {
   try {
     const { status } = req.body;
@@ -167,7 +185,11 @@ app.put("/api/appointments/:id/status", authMiddleware, allowRoles("doctor"), as
   }
 });
 
+// =======================
 // PATIENT ROUTES
+// =======================
+
+// GET patient profile
 app.get("/api/patient/profile", authMiddleware, allowRoles("patient"), async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -182,6 +204,7 @@ app.get("/api/patient/profile", authMiddleware, allowRoles("patient"), async (re
   }
 });
 
+// GET patient appointments
 app.get("/api/patient/appointments", authMiddleware, allowRoles("patient"), async (req, res) => {
   try {
     const appointments = await Appointment.find({ patientId: req.user.id })
@@ -203,6 +226,7 @@ app.get("/api/patient/appointments", authMiddleware, allowRoles("patient"), asyn
   }
 });
 
+// POST book appointment
 app.post("/api/appointments", authMiddleware, allowRoles("patient"), async (req, res) => {
   try {
     const { doctorId, date, time } = req.body;
@@ -222,6 +246,7 @@ app.post("/api/appointments", authMiddleware, allowRoles("patient"), async (req,
   }
 });
 
+// =======================
 app.listen(5000, () => {
   console.log("🚀 Server running on port 5000");
 });

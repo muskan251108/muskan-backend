@@ -6,21 +6,13 @@ const DoctorSchema = new mongoose.Schema({
     ref: "User",
     required: true
   },
-  specialization: {
-    type: String
-  },
-  fees: {
-    type: Number,
-    default: 0
-  },
-  timings: {
-    type: String,
-    default: "Not set"
-  },
-  available: {
-    type: Boolean,
-    default: true
-  }
+  specialization: { type: String, default: "" },
+  qualification: { type: String, default: "" },
+  experience: { type: String, default: "" },
+  address: { type: String, default: "" },
+  fees: { type: Number, default: 0 },
+  timings: { type: String, default: "Not set" },
+  available: { type: Boolean, default: true }
 });
 
 module.exports = mongoose.model("Doctor", DoctorSchema);
