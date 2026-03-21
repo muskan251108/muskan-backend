@@ -4,6 +4,7 @@ const dotenv = require("dotenv");
 const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const nodemailer = require("nodemailer");
 
 dotenv.config();
 const app = express();
@@ -15,7 +16,154 @@ const User = require("./models/User");
 const Doctor = require("./models/Doctor");
 const Appointment = require("./models/Appointment");
 
+// =======================
+// EMAIL SETUP
+// =======================
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
+// Transporter verify karo startup pe
+transporter.verify((error, success) => {
+  if (error) {
+    console.log("❌ Email transporter error:", error);
+  } else {
+    console.log("✅ Email transporter ready!");
+  }
+});
+
+const sendAppointmentEmail = async (toEmail, patientName, doctorName, date, time, fees, status) => {
+  const isConfirmed = status === "confirmed";
+  const isCancelled = status === "cancelled";
+  const isBooked = status === "booked";
+
+  let statusColor = "#00a8ff";
+  let statusText = "Booked 📋";
+  let statusMsg = "Aapki appointment book ho gayi hai!";
+
+  if (isConfirmed) {
+    statusColor = "#48bb78";
+    statusText = "Confirmed ✅";
+    statusMsg = "Aapki appointment confirm ho gayi hai! Please time par aayein.";
+  } else if (isCancelled) {
+    statusColor = "#fc8181";
+    statusText = "Cancelled ❌";
+    statusMsg = "Aapki appointment cancel ho gayi hai. Dobara book kar sakte hain.";
+  }
+
+  const html = `
+  <!DOCTYPE html>
+  <html>
+  <head><meta charset="UTF-8"></head>
+  <body style="margin:0;padding:0;background:#f0f4f8;font-family:'Segoe UI',sans-serif;">
+    <div style="max-width:520px;margin:32px auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10);">
+
+      <!-- Header -->
+      <div style="background:linear-gradient(135deg,#0f1f3d,#1a3a6b);padding:32px 28px;text-align:center;">
+        <div style="font-size:32px;margin-bottom:8px;">🌸</div>
+        <div style="font-size:22px;font-weight:800;color:#00a8ff;letter-spacing:2px;">MUSKAN</div>
+        <div style="font-size:13px;color:#a0aec0;margin-top:4px;letter-spacing:2px;">THE WAY TO HAPPINESS</div>
+      </div>
+
+      <!-- Status Banner -->
+      <div style="background:${statusColor}20;border-left:4px solid ${statusColor};padding:16px 28px;">
+        <div style="font-size:16px;font-weight:700;color:${statusColor};">${statusText}</div>
+        <div style="font-size:13px;color:#4a5568;margin-top:4px;">${statusMsg}</div>
+      </div>
+
+      <!-- Greeting -->
+      <div style="padding:24px 28px 0;">
+        <div style="font-size:18px;font-weight:700;color:#1a202c;">Namaste, ${patientName}! 👋</div>
+        <div style="font-size:14px;color:#718096;margin-top:6px;">Aapki appointment ki details neeche hain:</div>
+      </div>
+
+      <!-- Appointment Card -->
+      <div style="margin:20px 28px;background:#f8fafc;border-radius:16px;border:1.5px solid #e2e8f0;overflow:hidden;">
+
+        <div style="background:linear-gradient(135deg,#00a8ff15,#0057ff15);padding:20px 24px;border-bottom:1px solid #e2e8f0;">
+          <div style="font-size:13px;color:#718096;font-weight:600;margin-bottom:4px;">DOCTOR</div>
+          <div style="font-size:20px;font-weight:800;color:#1a202c;">Dr. ${doctorName}</div>
+        </div>
+
+        <div style="padding:0 24px;">
+          <div style="display:flex;justify-content:space-between;padding:14px 0;border-bottom:1px solid #e2e8f0;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:18px;">📆</span>
+              <div>
+                <div style="font-size:11px;color:#718096;font-weight:600;">DATE</div>
+                <div style="font-size:15px;font-weight:700;color:#1a202c;">${date}</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:18px;">⏰</span>
+              <div>
+                <div style="font-size:11px;color:#718096;font-weight:600;">TIME</div>
+                <div style="font-size:15px;font-weight:700;color:#1a202c;">${time}</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:18px;">💰</span>
+              <div>
+                <div style="font-size:11px;color:#718096;font-weight:600;">CONSULTATION FEES</div>
+                <div style="font-size:15px;font-weight:700;color:#1a202c;">₹${fees || "N/A"}</div>
+              </div>
+            </div>
+            <div style="background:${statusColor}20;padding:6px 16px;border-radius:20px;">
+              <div style="font-size:13px;font-weight:700;color:${statusColor};">${statusText}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      ${isConfirmed ? `
+      <div style="margin:0 28px 20px;background:#fffbeb;border-radius:12px;padding:16px 20px;border:1px solid #f6ad55;">
+        <div style="font-size:13px;font-weight:700;color:#92400e;">⚠️ Yaad Rakhein</div>
+        <ul style="margin:8px 0 0;padding-left:18px;font-size:13px;color:#92400e;">
+          <li>Appointment se 10 minute pehle pahunchein</li>
+          <li>Apna ID proof saath leke aayein</li>
+          <li>Previous reports/prescriptions leke aayein</li>
+        </ul>
+      </div>
+      ` : isCancelled ? `
+      <div style="margin:0 28px 20px;background:#fff5f5;border-radius:12px;padding:16px 20px;border:1px solid #fc8181;">
+        <div style="font-size:13px;color:#c53030;">Dobara appointment book karne ke liye MUSKAN app pe login karein.</div>
+      </div>
+      ` : `
+      <div style="margin:0 28px 20px;background:#ebf8ff;border-radius:12px;padding:16px 20px;border:1px solid #90cdf4;">
+        <div style="font-size:13px;color:#2b6cb0;">Aapki appointment pending hai. Doctor ke confirm karne par email aayegi.</div>
+      </div>
+      `}
+
+      <!-- Footer -->
+      <div style="background:#f8fafc;padding:20px 28px;text-align:center;border-top:1px solid #e2e8f0;">
+        <div style="font-size:13px;color:#718096;">Koi sawaal? Hamare dashboard pe login karein.</div>
+        <div style="font-size:12px;color:#a0aec0;margin-top:8px;">© 2024 MUSKAN Healthcare • The Way to Happiness 🌸</div>
+      </div>
+    </div>
+  </body>
+  </html>
+  `;
+
+  const info = await transporter.sendMail({
+    from: `"MUSKAN Healthcare 🌸" <${process.env.EMAIL_USER}>`,
+    to: toEmail,
+    subject: `Appointment ${statusText} — MUSKAN Healthcare`,
+    html,
+  });
+
+  console.log(`✅ Email sent to ${toEmail} — MessageID: ${info.messageId}`);
+};
+
+// =======================
 // JWT MIDDLEWARE
+// =======================
 const authMiddleware = (req, res, next) => {
   const token = req.header("Authorization")?.replace("Bearer ", "");
   if (!token) return res.status(401).json({ message: "No token, access denied" });
@@ -84,7 +232,6 @@ app.post("/api/auth/login", async (req, res) => {
 // DOCTOR ROUTES
 // =======================
 
-// GET all doctors
 app.get("/api/doctors", authMiddleware, async (req, res) => {
   try {
     const doctors = await Doctor.find().populate("userId", "name email");
@@ -107,7 +254,6 @@ app.get("/api/doctors", authMiddleware, async (req, res) => {
   }
 });
 
-// GET single doctor public profile
 app.get("/api/doctors/:id", authMiddleware, async (req, res) => {
   try {
     const doctor = await Doctor.findById(req.params.id).populate("userId", "name email");
@@ -129,7 +275,6 @@ app.get("/api/doctors/:id", authMiddleware, async (req, res) => {
   }
 });
 
-// GET doctor own profile
 app.get("/api/doctor/profile", authMiddleware, allowRoles("doctor"), async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -152,7 +297,6 @@ app.get("/api/doctor/profile", authMiddleware, allowRoles("doctor"), async (req,
   }
 });
 
-// PUT doctor profile update
 app.put("/api/doctor/profile", authMiddleware, allowRoles("doctor"), async (req, res) => {
   try {
     const { fees, timing, available, specialization, qualification, experience, address } = req.body;
@@ -168,7 +312,6 @@ app.put("/api/doctor/profile", authMiddleware, allowRoles("doctor"), async (req,
   }
 });
 
-// GET doctor appointments
 app.get("/api/doctor/appointments", authMiddleware, allowRoles("doctor"), async (req, res) => {
   try {
     const doctor = await Doctor.findOne({ userId: req.user.id });
@@ -189,16 +332,45 @@ app.get("/api/doctor/appointments", authMiddleware, allowRoles("doctor"), async 
   }
 });
 
-// PUT appointment status
+// PUT appointment status — EMAIL NOTIFICATION
 app.put("/api/appointments/:id/status", authMiddleware, allowRoles("doctor"), async (req, res) => {
   try {
     const { status } = req.body;
+
     const appointment = await Appointment.findByIdAndUpdate(
       req.params.id,
       { status },
       { new: true }
-    );
+    ).populate("patientId", "name email")
+      .populate("doctorId");
+
     if (!appointment) return res.status(404).json({ message: "Appointment not found" });
+
+    const doctorUser = await User.findById(appointment.doctorId?.userId);
+    const doctorName = doctorUser?.name || "Doctor";
+    const fees = appointment.doctorId?.fees || "N/A";
+
+    console.log(`📧 Sending email to: ${appointment.patientId?.email}`);
+    console.log(`📋 Status: ${status}, Doctor: ${doctorName}`);
+
+    if (appointment.patientId?.email) {
+      try {
+        await sendAppointmentEmail(
+          appointment.patientId.email,
+          appointment.patientId.name,
+          doctorName,
+          appointment.date,
+          appointment.time,
+          fees,
+          status
+        );
+      } catch (emailErr) {
+        console.log("❌ Email error FULL:", emailErr);
+      }
+    } else {
+      console.log("⚠️ No patient email found!");
+    }
+
     res.json({ message: "Status updated", appointment });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -209,7 +381,6 @@ app.put("/api/appointments/:id/status", authMiddleware, allowRoles("doctor"), as
 // PATIENT ROUTES
 // =======================
 
-// GET patient profile
 app.get("/api/patient/profile", authMiddleware, allowRoles("patient"), async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -224,7 +395,6 @@ app.get("/api/patient/profile", authMiddleware, allowRoles("patient"), async (re
   }
 });
 
-// GET patient appointments
 app.get("/api/patient/appointments", authMiddleware, allowRoles("patient"), async (req, res) => {
   try {
     const appointments = await Appointment.find({ patientId: req.user.id })
@@ -246,13 +416,13 @@ app.get("/api/patient/appointments", authMiddleware, allowRoles("patient"), asyn
   }
 });
 
-// POST book appointment
 app.post("/api/appointments", authMiddleware, allowRoles("patient"), async (req, res) => {
   try {
     const { doctorId, date, time } = req.body;
     const doctor = await Doctor.findById(doctorId);
     if (!doctor) return res.status(404).json({ message: "Doctor not found" });
     if (!doctor.available) return res.status(400).json({ message: "Doctor available nahi hai" });
+
     const appointment = new Appointment({
       doctorId: doctor._id,
       patientId: req.user.id,
@@ -260,6 +430,27 @@ app.post("/api/appointments", authMiddleware, allowRoles("patient"), async (req,
       time,
     });
     await appointment.save();
+
+    // Booking confirmation email
+    const patient = await User.findById(req.user.id);
+    const doctorUser = await User.findById(doctor.userId);
+    if (patient?.email) {
+      try {
+        await sendAppointmentEmail(
+          patient.email,
+          patient.name,
+          doctorUser?.name || "Doctor",
+          date,
+          time,
+          doctor.fees,
+          "booked"
+        );
+        console.log(`✅ Booking confirmation email sent to ${patient.email}`);
+      } catch (e) {
+        console.log("❌ Booking email error:", e);
+      }
+    }
+
     res.json({ message: "Appointment booked successfully", appointment });
   } catch (err) {
     res.status(500).json({ error: err.message });
