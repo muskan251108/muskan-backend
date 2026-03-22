@@ -20,14 +20,18 @@ const Appointment = require("./models/Appointment");
 // EMAIL SETUP
 // =======================
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+  tls: {
+    rejectUnauthorized: false
+  }
 });
 
-// Transporter verify karo startup pe
 transporter.verify((error, success) => {
   if (error) {
     console.log("❌ Email transporter error:", error);
@@ -39,7 +43,6 @@ transporter.verify((error, success) => {
 const sendAppointmentEmail = async (toEmail, patientName, doctorName, date, time, fees, status) => {
   const isConfirmed = status === "confirmed";
   const isCancelled = status === "cancelled";
-  const isBooked = status === "booked";
 
   let statusColor = "#00a8ff";
   let statusText = "Booked 📋";
@@ -62,28 +65,23 @@ const sendAppointmentEmail = async (toEmail, patientName, doctorName, date, time
   <body style="margin:0;padding:0;background:#f0f4f8;font-family:'Segoe UI',sans-serif;">
     <div style="max-width:520px;margin:32px auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10);">
 
-      <!-- Header -->
       <div style="background:linear-gradient(135deg,#0f1f3d,#1a3a6b);padding:32px 28px;text-align:center;">
         <div style="font-size:32px;margin-bottom:8px;">🌸</div>
         <div style="font-size:22px;font-weight:800;color:#00a8ff;letter-spacing:2px;">MUSKAN</div>
         <div style="font-size:13px;color:#a0aec0;margin-top:4px;letter-spacing:2px;">THE WAY TO HAPPINESS</div>
       </div>
 
-      <!-- Status Banner -->
       <div style="background:${statusColor}20;border-left:4px solid ${statusColor};padding:16px 28px;">
         <div style="font-size:16px;font-weight:700;color:${statusColor};">${statusText}</div>
         <div style="font-size:13px;color:#4a5568;margin-top:4px;">${statusMsg}</div>
       </div>
 
-      <!-- Greeting -->
       <div style="padding:24px 28px 0;">
         <div style="font-size:18px;font-weight:700;color:#1a202c;">Namaste, ${patientName}! 👋</div>
         <div style="font-size:14px;color:#718096;margin-top:6px;">Aapki appointment ki details neeche hain:</div>
       </div>
 
-      <!-- Appointment Card -->
       <div style="margin:20px 28px;background:#f8fafc;border-radius:16px;border:1.5px solid #e2e8f0;overflow:hidden;">
-
         <div style="background:linear-gradient(135deg,#00a8ff15,#0057ff15);padding:20px 24px;border-bottom:1px solid #e2e8f0;">
           <div style="font-size:13px;color:#718096;font-weight:600;margin-bottom:4px;">DOCTOR</div>
           <div style="font-size:20px;font-weight:800;color:#1a202c;">Dr. ${doctorName}</div>
@@ -141,7 +139,6 @@ const sendAppointmentEmail = async (toEmail, patientName, doctorName, date, time
       </div>
       `}
 
-      <!-- Footer -->
       <div style="background:#f8fafc;padding:20px 28px;text-align:center;border-top:1px solid #e2e8f0;">
         <div style="font-size:13px;color:#718096;">Koi sawaal? Hamare dashboard pe login karein.</div>
         <div style="font-size:12px;color:#a0aec0;margin-top:8px;">© 2024 MUSKAN Healthcare • The Way to Happiness 🌸</div>
@@ -332,7 +329,6 @@ app.get("/api/doctor/appointments", authMiddleware, allowRoles("doctor"), async 
   }
 });
 
-// PUT appointment status — EMAIL NOTIFICATION
 app.put("/api/appointments/:id/status", authMiddleware, allowRoles("doctor"), async (req, res) => {
   try {
     const { status } = req.body;
@@ -431,7 +427,6 @@ app.post("/api/appointments", authMiddleware, allowRoles("patient"), async (req,
     });
     await appointment.save();
 
-    // Booking confirmation email
     const patient = await User.findById(req.user.id);
     const doctorUser = await User.findById(doctor.userId);
     if (patient?.email) {
