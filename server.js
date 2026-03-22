@@ -5,8 +5,6 @@ const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
-const Razorpay = require("razorpay");
-const crypto = require("crypto");
 
 dotenv.config();
 const app = express();
@@ -14,29 +12,18 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// =======================
-// MODELS
-// =======================
+// ================= MODELS =================
 const User = require("./models/User");
 const Doctor = require("./models/Doctor");
 const Appointment = require("./models/Appointment");
 
-// =======================
-// ✅ MONGOOSE FIX (LATEST)
-// =======================
-mongoose.set("returnDocument", "after");
-
-// =======================
-// DATABASE
-// =======================
+// ================= DATABASE =================
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB Connected"))
   .catch((err) => console.log(err));
 
-// =======================
-// EMAIL SETUP
-// =======================
+// ================= EMAIL =================
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
@@ -45,14 +32,12 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-transporter.verify((error) => {
-  if (error) console.log("❌ Email error:", error);
-  else console.log("✅ Email transporter ready!");
+transporter.verify((err) => {
+  if (err) console.log("❌ Email error:", err);
+  else console.log("✅ Email ready");
 });
 
-// =======================
-// EMAIL FUNCTION
-// =======================
+// ================= EMAIL FUNCTION =================
 const sendAppointmentEmail = async (
   toEmail,
   patientName,
@@ -63,12 +48,12 @@ const sendAppointmentEmail = async (
   status
 ) => {
   await transporter.sendMail({
-    from: `"MUSKAN Healthcare 🌸" <${process.env.EMAIL_USER}>`,
+    from: `"MUSKAN Healthcare" <${process.env.EMAIL_USER}>`,
     to: toEmail,
     subject: `Appointment ${status}`,
     html: `
       <h2>Appointment ${status}</h2>
-      <p>Hello ${patientName}</p>
+      <p>${patientName}</p>
       <p>Doctor: ${doctorName}</p>
       <p>Date: ${date}</p>
       <p>Time: ${time}</p>
@@ -77,39 +62,9 @@ const sendAppointmentEmail = async (
   });
 };
 
-// =======================
-// RAZORPAY SETUP
-// =======================
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+// ================= AUTH =================
 
-// =======================
-// MIDDLEWARE
-// =======================
-const authMiddleware = (req, res, next) => {
-  const token = req.header("Authorization")?.replace("Bearer ", "");
-  if (!token) return res.status(401).json({ message: "No token" });
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch {
-    res.status(401).json({ message: "Invalid token" });
-  }
-};
-
-const allowRoles = (...roles) => (req, res, next) => {
-  if (!roles.includes(req.user.role))
-    return res.status(403).json({ message: "Access denied" });
-  next();
-};
-
-// =======================
-// AUTH ROUTES
-// =======================
+// REGISTER
 app.post("/api/auth/register", async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
@@ -132,12 +87,17 @@ app.post("/api/auth/register", async (req, res) => {
   }
 });
 
+// LOGIN ✅ FIXED
 app.post("/api/auth/login", async (req, res) => {
   try {
+    const { email, password } = req.body;
+
+    console.log("LOGIN:", email);
+
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    const match = await bcrypt.compare(req.body.password, user.password);
+    const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(400).json({ message: "Invalid password" });
 
     const token = jwt.sign(
@@ -146,82 +106,63 @@ app.post("/api/auth/login", async (req, res) => {
       { expiresIn: "1d" }
     );
 
+    console.log("LOGIN SUCCESS");
+
     res.json({ token });
+
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ================= MIDDLEWARE =================
+const authMiddleware = (req, res, next) => {
+  const token = req.header("Authorization")?.replace("Bearer ", "");
+  if (!token) return res.status(401).json({ message: "No token" });
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch {
+    res.status(401).json({ message: "Invalid token" });
+  }
+};
+
+const allowRoles = (...roles) => (req, res, next) => {
+  if (!roles.includes(req.user.role))
+    return res.status(403).json({ message: "Access denied" });
+  next();
+};
+
+// ================= DOCTOR UPDATE =================
+app.put("/api/doctor/profile", authMiddleware, allowRoles("doctor"), async (req, res) => {
+  try {
+    const doctor = await Doctor.findOneAndUpdate(
+      { userId: req.user.id },
+      req.body,
+      { returnDocument: "after" }
+    );
+
+    res.json(doctor);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// =======================
-// BOOK APPOINTMENT + CREATE ORDER
-// =======================
-app.post("/api/appointments", authMiddleware, allowRoles("patient"), async (req, res) => {
+// ================= APPOINTMENT UPDATE =================
+app.put("/api/appointments/:id/status", authMiddleware, allowRoles("doctor"), async (req, res) => {
   try {
-    const { doctorId, date, time } = req.body;
-
-    const doctor = await Doctor.findById(doctorId);
-    if (!doctor) return res.status(404).json({ message: "Doctor not found" });
-
-    const order = await razorpay.orders.create({
-      amount: doctor.fees * 100,
-      currency: "INR",
-    });
-
-    const appointment = new Appointment({
-      doctorId,
-      patientId: req.user.id,
-      date,
-      time,
-      status: "pending",
-      orderId: order.id,
-    });
-
-    await appointment.save();
-
-    res.json({
-      appointmentId: appointment._id,
-      order,
-      key: process.env.RAZORPAY_KEY_ID,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// =======================
-// PAYMENT VERIFY + CONFIRM
-// =======================
-app.post("/api/payment/verify", authMiddleware, async (req, res) => {
-  try {
-    const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature,
-      appointmentId,
-    } = req.body;
-
-    const body = razorpay_order_id + "|" + razorpay_payment_id;
-
-    const expected = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-      .update(body)
-      .digest("hex");
-
-    if (expected !== razorpay_signature) {
-      return res.status(400).json({ message: "Payment failed" });
-    }
-
     const appointment = await Appointment.findByIdAndUpdate(
-      appointmentId,
-      {
-        status: "confirmed",
-        isPaid: true,
-        paymentId: razorpay_payment_id,
-      },
+      req.params.id,
+      { status: req.body.status },
       { returnDocument: "after" }
     )
       .populate("patientId", "name email")
       .populate("doctorId");
+
+    if (!appointment) return res.status(404).json({ message: "Not found" });
 
     const doctorUser = await User.findById(appointment.doctorId.userId);
 
@@ -232,16 +173,16 @@ app.post("/api/payment/verify", authMiddleware, async (req, res) => {
       appointment.date,
       appointment.time,
       appointment.doctorId.fees,
-      "confirmed"
+      req.body.status
     );
 
-    res.json({ message: "Payment successful", appointment });
+    res.json(appointment);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// =======================
+// ================= SERVER =================
 app.listen(5000, () => {
   console.log("🚀 Server running on port 5000");
 });
