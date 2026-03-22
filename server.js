@@ -107,10 +107,23 @@ app.get("/api/doctor/appointments", authMiddleware, allowRoles("doctor"), async 
   try {
     const doctor = await Doctor.findOne({ userId: req.user.id });
     if (!doctor) return res.status(404).json({ message: "Doctor not found" });
+
     const appointments = await Appointment.find({ doctorId: doctor._id })
       .populate("patientId", "name email")
       .sort({ createdAt: -1 });
-    res.json(appointments);
+
+    // ✅ FIX: patientName alag field mein bhejo
+    const formatted = appointments.map((a) => ({
+      _id: a._id,
+      date: a.date,
+      time: a.time,
+      status: a.status,
+      isPaid: a.isPaid,
+      patientName: a.patientId?.name || "Unknown",
+      patientEmail: a.patientId?.email || "",
+    }));
+
+    res.json(formatted);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -157,19 +170,20 @@ app.get("/api/patient/appointments", authMiddleware, allowRoles("patient"), asyn
     const appointments = await Appointment.find({ patientId: req.user.id })
       .populate({ path: "doctorId", populate: { path: "userId", select: "name" } })
       .sort({ createdAt: -1 });
+
+    // ✅ FIX: doctorName alag field mein bhejo
     const formatted = appointments.map((a) => ({
       _id: a._id,
       date: a.date,
       time: a.time,
       status: a.status,
       isPaid: a.isPaid,
-      doctor: {
-        name: a.doctorId?.userId?.name || "Unknown",
-        specialization: a.doctorId?.specialization || "",
-        fees: a.doctorId?.fees || 0,
-        timing: a.doctorId?.timing || "",
-      },
+      doctorName: a.doctorId?.userId?.name || "Unknown",
+      specialization: a.doctorId?.specialization || "",
+      fees: a.doctorId?.fees || 0,
+      timing: a.doctorId?.timing || "",
     }));
+
     res.json(formatted);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
