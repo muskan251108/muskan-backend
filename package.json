@@ -19,6 +19,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.2.1",
     "nodemailer": "^8.0.3",
+    "razorpay": "^2.9.6",
     "react-router-dom": "^7.13.1"
   },
   "devDependencies": {
